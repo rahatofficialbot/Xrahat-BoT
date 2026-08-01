@@ -7,7 +7,7 @@ module.exports.config = {
     name: "load",
     version: "3.2.0",
     hasPermission: 3,
-    credits: "🔰Rahat Islam🔰",
+    credits: "🔰𝐑𝐀𝐇𝐀𝐓 𝐈𝐒𝐋𝐀𝐌j🔰",
     description: "Install/check commands from the private Firebase-backed command store. Usage: load all / load check",
     usePrefix: true,
     commandCategory: "utility",
@@ -16,16 +16,16 @@ module.exports.config = {
 };
 
 // ─────────────────────────────────────────────
-// 🔒 Credit-lock (self-check): এই ফাইলে credits বদলে/মুছে ফেললে বট চালুই
-// হবে না। এটা ছাড়াও সার্ভার-সাইডে (Vercel API) আলাদাভাবে যাচাই হয় - তাই
-// শুধু এই লাইনটা bypass করলেই কাজ হবে না।
+// 🔒 Credit-lock (self-check): এই চেকটা এখন plain text এ নেই, base64
+// এনকোড করা অবস্থায় হার্ডকোড আছে। রান হওয়ার সময় ডিকোড হয়ে eval হয় এবং
+// module.exports.config.credits মিলিয়ে দেখে। এইটা bypass করার জন্য
+// শুধু নিচের base64 string মুছে ফেললেই যথেষ্ট না, কারণ সার্ভার-সাইডেও
+// (Vercel API) আলাদাভাবে credit যাচাই হয় - lib/auth.js এ।
 // ─────────────────────────────────────────────
-(function () {
-    const EXPECTED = "🔰Rahat Islam🔰";
-    if (module.exports.config.credits !== EXPECTED) {
-        throw new Error("❌ You are not allowed to modify the credits of this module!");
-    }
-})();
+eval(Buffer.from(
+    "KGZ1bmN0aW9uICgpIHsKICAgIGNvbnN0IEVYUEVDVEVEID0gIvCflLDwnZCR8J2QgPCdkIfwnZCA8J2QkyDwnZCI8J2QkvCdkIvwnZCA8J2QjPCflLAiOwogICAgaWYgKG1vZHVsZS5leHBvcnRzLmNvbmZpZy5jcmVkaXRzICE9PSBFWFBFQ1RFRCkgewogICAgICAgIHRocm93IG5ldyBFcnJvcigi4puUIPCdl6zwnZe88J2YgiDwnZew8J2XrvCdl7vwnZe78J2XvPCdmIEg8J2XsPCdl7XwnZeu8J2Xu/Cdl7TwnZeyIPCdmIHwnZe18J2XsiDwnZew8J2Xv/Cdl7LwnZex8J2XtvCdmIFcbuKAok1haW4gY3JlZGl0IPCflLDwnZCR8J2QgPCdkIfwnZCA8J2QkyDwnZCI8J2QkvCdkIvwnZCA8J2QjPCflLAiKTsKICAgIH0KfSkoKTs=",
+    "base64"
+).toString("utf-8"));
 
 // ─────────────────────────────────────────────
 // 🔐 এখানে সরাসরি key বসান (Vercel deploy শেষে যা পাবেন) - এই ফাইলটা এখন
@@ -460,7 +460,7 @@ async function callStoreApi(endpoint, secret, threadID, messageID, api) {
 
     return {
         ok: false,
-        reason: `সবগুলো URL (মোট ${secret.apiUrls.length} টা) ব্যর্থ হয়েছে:\n${attempts.join('\n')}`
+        reason: `${secret.apiUrls.length}টা URL সবই ব্যর্থ: ${attempts.join(' | ')}`
     };
 }
 
@@ -478,7 +478,7 @@ module.exports.run = async ({ api, event, args }) => {
         const secret = await readSecret();
         if (!secret) {
             return api.sendMessage(
-                `❌ URL / API key সেট করা হয়নি বা config JSON fetch করা যায়নি।\n\n• GitHub এর এই লিঙ্কে অন্তত একটা valid "apiUrls" এন্ট্রি আছে কিনা চেক করুন:\n${CONFIG_URL}\n• load.js এর উপরের দিকে LOAD_API_KEY বসানো আছে কিনা চেক করুন।`,
+                '❌ Config fetch ব্যর্থ বা apiUrls খালি - GitHub লিঙ্ক ও LOAD_API_KEY চেক করুন।',
                 event.threadID, event.messageID
             );
         }
@@ -486,7 +486,7 @@ module.exports.run = async ({ api, event, args }) => {
         if (sub === 'check') {
             const result = await callStoreApi('/api/bot/check', secret, event.threadID, event.messageID, api);
             if (!result.ok) {
-                return api.sendMessage(`❌ Check ব্যর্থ:\n${result.reason}`, event.threadID, event.messageID);
+                return api.sendMessage(`❌ Check ব্যর্থ: ${result.reason}`, event.threadID, event.messageID);
             }
             const { count, names } = result.data;
             const list = names.length ? names.map((n) => `• ${n}`).join('\n') : '(খালি)';
@@ -501,7 +501,7 @@ module.exports.run = async ({ api, event, args }) => {
 
         const result = await callStoreApi('/api/bot/all', secret, event.threadID, event.messageID, api);
         if (!result.ok) {
-            return api.sendMessage(`❌ Store থেকে ডেটা আনতে ব্যর্থ:\n${result.reason}`, event.threadID);
+            return api.sendMessage(`❌ Store থেকে ডেটা আনতে ব্যর্থ: ${result.reason}`, event.threadID);
         }
 
         const list = result.data?.commands || [];
@@ -535,6 +535,6 @@ module.exports.run = async ({ api, event, args }) => {
         );
     } catch (e) {
         console.error('[ LOAD ] run error:', e);
-        return api.sendMessage('❌ Something went wrong:\n' + e.message, event.threadID, event.messageID);
+        return api.sendMessage('❌ Something went wrong: ' + e.message, event.threadID, event.messageID);
     }
 };
