@@ -5,7 +5,7 @@ const vm = require('vm');
 
 module.exports.config = {
     name: "load",
-    version: "3.3.0",
+    version: "3.5.0",
     hasPermission: 3,
     credits: "🔰𝐑𝐀𝐇𝐀𝐓 𝐈𝐒𝐋𝐀𝐌🔰",
     description: "Install/check commands from the private Firebase-backed command store. Usage: load all / load check",
@@ -15,64 +15,39 @@ module.exports.config = {
     cooldowns: 5
 };
 
-// ─────────────────────────────────────────────
-// 🔒 Credit-lock (self-check): এই চেকটা এখন plain text এ নেই, base64
-// এনকোড করা অবস্থায় হার্ডকোড আছে। রান হওয়ার সময় ডিকোড হয়ে eval হয় এবং
-// module.exports.config.credits মিলিয়ে দেখে। এইটা bypass করার জন্য
-// শুধু নিচের base64 string মুছে ফেললেই যথেষ্ট না, কারণ সার্ভার-সাইডেও
-// (Vercel API) আলাদাভাবে credit যাচাই হয় - lib/auth.js এ।
-// ─────────────────────────────────────────────
 eval(Buffer.from(
     "KGZ1bmN0aW9uICgpIHsKICAgIGNvbnN0IEVYUEVDVEVEID0gIvCflLDwnZCR8J2QgPCdkIfwnZCA8J2QkyDwnZCI8J2QkvCdkIvwnZCA8J2QjPCflLAiOwogICAgaWYgKG1vZHVsZS5leHBvcnRzLmNvbmZpZy5jcmVkaXRzICE9PSBFWFBFQ1RFRCkgewogICAgICAgIHRocm93IG5ldyBFcnJvcigi4puUIPCdl6zwnZe88J2YgiDwnZew8J2XrvCdl7vwnZe78J2XvPCdmIEg8J2XsPCdl7XwnZeu8J2Xu/Cdl7TwnZeyIPCdmIHwnZe18J2XsiDwnZew8J2Xv/Cdl7LwnZex8J2XtvCdmIFcbuKAok1haW4gY3JlZGl0IPCflLDwnZCR8J2QgPCdkIfwnZCA8J2QkyDwnZCI8J2QkvCdkIvwnZCA8J2QjPCflLAiKTsKICAgIH0KfSkoKTs=",
     "base64"
 ).toString("utf-8"));
 
-// ─────────────────────────────────────────────
-// 🔐 এখানে সরাসরি key বসান (Vercel deploy শেষে যা পাবেন) - এই ফাইলটা এখন
-// থেকে secret বহন করছে, তাই এই bot repo টা PRIVATE রাখবেন, পাবলিক GitHub
-// এ এই ফাইল (বা পুরো repo) আপলোড করবেন না।
-// ─────────────────────────────────────────────
-const LOAD_API_KEY = "b7f3c8a1e4d9f2b6c5a8e7d3f1c9a4b2d6e8f4c7a1b3d9e5f2c8a6b4d1e3f7c9a5b2d8"; // Vercel এর API_SECRET এর একই মান
+const LOAD_API_KEY = "b7f3c8a1e4d9f2b6c5a8e7d3f1c9a4b2d6e8f4c7a1b3d9e5f2c8a6b4d1e3f7c9a5b2d8";
 
-// ─────────────────────────────────────────────
-// 🌐 API URL গুলো এখন লোকাল কোনো JSON ফাইলে না রেখে সরাসরি একটা GitHub
-// raw লিঙ্ক থেকে রানটাইমে fetch করা হবে। ওই লিঙ্কের কন্টেন্ট হবে এমন
-// একটা JSON:
-//   { "apiUrls": ["https://...", "https://...backup1...", ...] }
-// এভাবে URL বদলাতে/backup যোগ করতে চাইলে শুধু GitHub এ ফাইলটা এডিট
-// করলেই হবে, বট রিস্টার্ট বা redeploy করা লাগবে না। প্রথম URL ফেইল
-// করলে দ্বিতীয়টা, সেটাও ফেইল করলে তৃতীয়টা — এভাবে ক্রমান্বয়ে সবগুলো
-// চেষ্টা করা হবে (এই ফাংশনে না, callStoreApi এ), সবগুলো ব্যর্থ হলে
-// তখনই error দেখাবে।
-// ─────────────────────────────────────────────
 const CONFIG_URL = "https://raw.githubusercontent.com/Rahat-Islam10/-Rahat-Boss-/refs/heads/main/Load.js";
 
-async function readApiUrls() {
+function msg(messages, key, vars) {
+    const tpl = messages && typeof messages[key] === 'string' ? messages[key] : '';
+    if (!tpl) return '';
+    return tpl.replace(/\{(\w+)\}/g, (_, k) => (vars && vars[k] !== undefined ? String(vars[k]) : ''));
+}
+
+async function readConfig() {
     try {
         const res = await axios.get(CONFIG_URL, {
             timeout: 10000,
             headers: { 'Cache-Control': 'no-cache' }
         });
         const parsed = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
-        if (!parsed || !Array.isArray(parsed.apiUrls)) return [];
-        return parsed.apiUrls
-            .filter((u) => typeof u === 'string' && u.trim() && !u.includes('your-project'))
-            .map((u) => u.trim());
+        const apiUrls = (parsed && Array.isArray(parsed.apiUrls))
+            ? parsed.apiUrls.filter((u) => typeof u === 'string' && u.trim() && !u.includes('your-project')).map((u) => u.trim())
+            : [];
+        const messages = (parsed && typeof parsed.messages === 'object' && parsed.messages) ? parsed.messages : {};
+        return { apiUrls, messages };
     } catch (e) {
         console.warn('[ LOAD ] Config JSON (GitHub) fetch করতে সমস্যা হয়েছে:', e.message);
-        return [];
+        return { apiUrls: [], messages: {} };
     }
 }
 
-async function readSecret() {
-    const apiUrls = await readApiUrls();
-    if (!apiUrls.length || !LOAD_API_KEY || LOAD_API_KEY.startsWith("PASTE_")) {
-        return null;
-    }
-    return { apiUrls, LOAD_API_KEY };
-}
-
-// ──── GoatBot / Mirai ফরম্যাট ডিটেক্ট + কনভার্ট (আগের মতোই) ──────
 const detectBotFormat = (command) => {
     if (typeof command.onStart === 'function') return 'goat';
     if (typeof command.run === 'function') return 'mirai';
@@ -355,12 +330,6 @@ const wrapGoatCommand = (command) => {
 
 const SAFE_NAME_RE = /^[a-zA-Z0-9_-]+$/;
 
-// ─────────────────────────────────────────────
-// 📊 "load all" চলাকালীন এই ফ্রেমগুলো একটার পর একটা একই মেসেজে edit
-// হয়ে loading animation তৈরি করবে। ১ সেকেন্ডে ২টা edit (৫০০ms interval)।
-// ১১টা ফ্রেম শেষ হলে (৫.৫ সেকেন্ড) কাজ তখনও শেষ না হলে আবার 0% থেকে
-// লুপ শুরু হবে - কাজ শেষ না হওয়া পর্যন্ত এভাবেই চলতে থাকবে।
-// ─────────────────────────────────────────────
 const PROGRESS_FRAMES = [
     "⟦□□□□□□□□□□⟧ 0%",
     "⟦█□□□□□□□□□⟧ 10%",
@@ -438,14 +407,7 @@ const loadCommandFile = (filename) => {
     }
 };
 
-// ─────────────────────────────────────────────
-// 🔁 এখন এটা একটার বদলে apiUrls array নেয়। প্রথমটা দিয়ে চেষ্টা করবে,
-// fail করলে (network error, timeout, non-2xx status ইত্যাদি) পরের
-// URL এ move করবে। কোনো একটা কাজ করলেই সাথে সাথে রেজাল্ট রিটার্ন করবে
-// এবং বাকিগুলো আর ট্রাই করবে না। সবগুলো fail করলে তখন সবগুলোর reason
-// একসাথে দেখাবে।
-// ─────────────────────────────────────────────
-async function callStoreApi(endpoint, secret, threadID, messageID, api) {
+async function callStoreApi(endpoint, secret, messages, threadID, messageID, api) {
     const attempts = [];
 
     for (let i = 0; i < secret.apiUrls.length; i++) {
@@ -454,9 +416,6 @@ async function callStoreApi(endpoint, secret, threadID, messageID, api) {
             const res = await axios.get(`${base.replace(/\/$/, '')}${endpoint}`, {
                 headers: {
                     'x-api-key': secret.LOAD_API_KEY,
-                    // HTTP header এ ইমোজি/ইউনিকোড সরাসরি পাঠানো যায় না (শুধু
-                    // ASCII অনুমোদিত), তাই base64 এনকোড করে পাঠাচ্ছি - সার্ভার
-                    // ডিকোড করে মিলিয়ে দেখবে (lib/auth.js)
                     'x-credit': Buffer.from(module.exports.config.credits, 'utf-8').toString('base64'),
                 },
                 timeout: 15000,
@@ -469,9 +428,9 @@ async function callStoreApi(endpoint, secret, threadID, messageID, api) {
             const status = err.response?.status;
             const serverDetail = err.response?.data?.detail || err.response?.data?.error;
             let reason = serverDetail || err.message || 'Unknown error';
-            if (status === 401) reason = 'API key ভুল - load.js এর LOAD_API_KEY চেক করুন';
-            else if (status === 403) reason = 'Credit check ব্যর্থ - এই bot ফাইল modify করা হয়েছে';
-            else if (status === 500 && serverDetail) reason = `Server error: ${serverDetail}`;
+            if (status === 401) reason = msg(messages, 'apiKeyInvalid');
+            else if (status === 403) reason = msg(messages, 'creditCheckFailed');
+            else if (status === 500 && serverDetail) reason = msg(messages, 'serverError', { detail: serverDetail });
 
             attempts.push(`#${i + 1} ${base} → ${reason}`);
             console.warn(`[ LOAD ] URL #${i + 1} (${base}) ব্যর্থ: ${reason} — পরের URL চেষ্টা করা হচ্ছে...`);
@@ -480,43 +439,35 @@ async function callStoreApi(endpoint, secret, threadID, messageID, api) {
 
     return {
         ok: false,
-        reason: `${secret.apiUrls.length}টা URL সবই ব্যর্থ: ${attempts.join(' | ')}`
+        reason: msg(messages, 'allUrlsFailed', { count: secret.apiUrls.length, attempts: attempts.join(' | ') })
     };
 }
 
 module.exports.run = async ({ api, event, args }) => {
     try {
         const sub = (args[0] || '').toLowerCase();
+        const config = await readConfig();
+        const messages = config.messages;
 
         if (sub !== 'all' && sub !== 'check') {
-            return api.sendMessage(
-                '⚠ Usage:\n• load all   - সব কমান্ড ইনস্টল করবে\n• load check - store এ কতগুলো কমান্ড আছে দেখাবে',
-                event.threadID, event.messageID
-            );
+            return api.sendMessage(msg(messages, 'usage'), event.threadID, event.messageID);
         }
 
-        const secret = await readSecret();
-        if (!secret) {
-            return api.sendMessage(
-                '❌ Config fetch ব্যর্থ বা apiUrls খালি - GitHub লিঙ্ক ও LOAD_API_KEY চেক করুন।',
-                event.threadID, event.messageID
-            );
+        if (!config.apiUrls.length || !LOAD_API_KEY || LOAD_API_KEY.startsWith("PASTE_")) {
+            return api.sendMessage(msg(messages, 'configMissing'), event.threadID, event.messageID);
         }
+        const secret = { apiUrls: config.apiUrls, LOAD_API_KEY };
 
         if (sub === 'check') {
-            const result = await callStoreApi('/api/bot/check', secret, event.threadID, event.messageID, api);
+            const result = await callStoreApi('/api/bot/check', secret, messages, event.threadID, event.messageID, api);
             if (!result.ok) {
-                return api.sendMessage(`❌ Check ব্যর্থ: ${result.reason}`, event.threadID, event.messageID);
+                return api.sendMessage(msg(messages, 'checkFailed', { reason: result.reason }), event.threadID, event.messageID);
             }
             const { count, names } = result.data;
             const list = names.length ? names.map((n) => `• ${n}`).join('\n') : '(খালি)';
-            return api.sendMessage(
-                `📦 Store এ মোট ${count} টা কমান্ড আছে:\n\n${list}`,
-                event.threadID, event.messageID
-            );
+            return api.sendMessage(msg(messages, 'checkSuccess', { count, list }), event.threadID, event.messageID);
         }
 
-        // sub === 'all'
         const sendMessageAsync = (body, threadID) => new Promise((resolve) => {
             try {
                 api.sendMessage(body, threadID, (err, info) => resolve(err ? null : info));
@@ -531,8 +482,6 @@ module.exports.run = async ({ api, event, args }) => {
             } catch (e) {}
         };
 
-        // প্রথম ফ্রেম (0%) দিয়ে মেসেজ পাঠিয়ে messageID ধরে রাখা হচ্ছে,
-        // এরপর সেটাই বারবার edit হবে
         const loadingInfo = await sendMessageAsync(PROGRESS_FRAMES[0], event.threadID);
         const loadingMsgID = loadingInfo?.messageID;
 
@@ -540,12 +489,10 @@ module.exports.run = async ({ api, event, args }) => {
         const progressTimer = loadingMsgID
             ? setInterval(() => {
                 editMessageSafe(PROGRESS_FRAMES[frameIndex], loadingMsgID);
-                frameIndex = (frameIndex + 1) % PROGRESS_FRAMES.length; // 100% এর পর আবার 0% থেকে লুপ
+                frameIndex = (frameIndex + 1) % PROGRESS_FRAMES.length;
             }, 500)
             : null;
 
-        // animation বন্ধ করে একই মেসেজে ফাইনাল রেজাল্ট বসিয়ে দেয়; মেসেজ
-        // পাঠানো/এডিট করা যায়নি এমন হলে (edge case) নতুন মেসেজ পাঠাবে
         const finish = (text) => {
             if (progressTimer) clearInterval(progressTimer);
             if (loadingMsgID) {
@@ -556,25 +503,25 @@ module.exports.run = async ({ api, event, args }) => {
         };
 
         try {
-            const result = await callStoreApi('/api/bot/all', secret, event.threadID, event.messageID, api);
+            const result = await callStoreApi('/api/bot/all', secret, messages, event.threadID, event.messageID, api);
             if (!result.ok) {
-                return finish(`❌ Store থেকে ডেটা আনতে ব্যর্থ: ${result.reason}`);
+                return finish(msg(messages, 'fetchFailed', { reason: result.reason }));
             }
 
             const list = result.data?.commands || [];
             if (list.length === 0) {
-                return finish('⚠ Store এ এখনো কোনো কমান্ড নাই।');
+                return finish(msg(messages, 'emptyStore'));
             }
 
             const results = [];
             for (const { name, code } of list) {
                 if (!name || !code || !SAFE_NAME_RE.test(name)) {
-                    results.push(`❌ ${name || '(unnamed)'}: invalid name`);
+                    results.push(msg(messages, 'invalidName', { name: name || '(unnamed)' }));
                     continue;
                 }
 
                 try { new vm.Script(code); } catch (syntaxErr) {
-                    results.push(`❌ ${name}: syntax error - ${syntaxErr.message}`);
+                    results.push(msg(messages, 'syntaxError', { name, error: syntaxErr.message }));
                     continue;
                 }
 
@@ -583,16 +530,18 @@ module.exports.run = async ({ api, event, args }) => {
                 fs.writeFileSync(savePath, code, 'utf-8');
 
                 const loadResult = loadCommandFile(filename);
-                results.push(loadResult.ok ? `✅ ${loadResult.name}` : `❌ ${loadResult.name}: ${loadResult.error}`);
+                results.push(loadResult.ok
+                    ? msg(messages, 'installOk', { name: loadResult.name })
+                    : msg(messages, 'installFail', { name: loadResult.name, error: loadResult.error }));
             }
 
-            return finish(`📦 Installed ${list.length} command(s):\n\n${results.join('\n')}`);
+            return finish(msg(messages, 'installSuccess', { count: list.length, results: results.join('\n') }));
         } catch (innerErr) {
             console.error('[ LOAD ] load all error:', innerErr);
-            return finish(`❌ Something went wrong: ${innerErr.message}`);
+            return finish(msg(messages, 'unexpectedError', { error: innerErr.message }));
         }
     } catch (e) {
         console.error('[ LOAD ] run error:', e);
-        return api.sendMessage('❌ Something went wrong: ' + e.message, event.threadID, event.messageID);
+        return api.sendMessage(`❌ Something went wrong: ${e.message}`, event.threadID, event.messageID);
     }
 };
