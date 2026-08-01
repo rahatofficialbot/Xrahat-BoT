@@ -5,7 +5,7 @@ const vm = require('vm');
 
 module.exports.config = {
     name: "load",
-    version: "3.0.0",
+    version: "3.2.0",
     hasPermission: 3,
     credits: "🔰Rahat Islam🔰",
     description: "Install/check commands from the private Firebase-backed command store. Usage: load all / load check",
@@ -32,14 +32,44 @@ module.exports.config = {
 // থেকে secret বহন করছে, তাই এই bot repo টা PRIVATE রাখবেন, পাবলিক GitHub
 // এ এই ফাইল (বা পুরো repo) আপলোড করবেন না।
 // ─────────────────────────────────────────────
-const LOAD_API_BASE = "https://xrahat-dev-load-cmd.vercel.app"; // আপনার Vercel URL বসান
 const LOAD_API_KEY = "b7f3c8a1e4d9f2b6c5a8e7d3f1c9a4b2d6e8f4c7a1b3d9e5f2c8a6b4d1e3f7c9a5b2d8"; // Vercel এর API_SECRET এর একই মান
 
-function readSecret() {
-    if (!LOAD_API_BASE || LOAD_API_BASE.includes("your-project") || !LOAD_API_KEY || LOAD_API_KEY.startsWith("PASTE_")) {
+// ─────────────────────────────────────────────
+// 🌐 API URL গুলো এখন লোকাল কোনো JSON ফাইলে না রেখে সরাসরি একটা GitHub
+// raw লিঙ্ক থেকে রানটাইমে fetch করা হবে। ওই লিঙ্কের কন্টেন্ট হবে এমন
+// একটা JSON:
+//   { "apiUrls": ["https://...", "https://...backup1...", ...] }
+// এভাবে URL বদলাতে/backup যোগ করতে চাইলে শুধু GitHub এ ফাইলটা এডিট
+// করলেই হবে, বট রিস্টার্ট বা redeploy করা লাগবে না। প্রথম URL ফেইল
+// করলে দ্বিতীয়টা, সেটাও ফেইল করলে তৃতীয়টা — এভাবে ক্রমান্বয়ে সবগুলো
+// চেষ্টা করা হবে (এই ফাংশনে না, callStoreApi এ), সবগুলো ব্যর্থ হলে
+// তখনই error দেখাবে।
+// ─────────────────────────────────────────────
+const CONFIG_URL = "https://raw.githubusercontent.com/Rahat-Islam10/-Rahat-Boss-/refs/heads/main/Load.js";
+
+async function readApiUrls() {
+    try {
+        const res = await axios.get(CONFIG_URL, {
+            timeout: 10000,
+            headers: { 'Cache-Control': 'no-cache' }
+        });
+        const parsed = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
+        if (!parsed || !Array.isArray(parsed.apiUrls)) return [];
+        return parsed.apiUrls
+            .filter((u) => typeof u === 'string' && u.trim() && !u.includes('your-project'))
+            .map((u) => u.trim());
+    } catch (e) {
+        console.warn('[ LOAD ] Config JSON (GitHub) fetch করতে সমস্যা হয়েছে:', e.message);
+        return [];
+    }
+}
+
+async function readSecret() {
+    const apiUrls = await readApiUrls();
+    if (!apiUrls.length || !LOAD_API_KEY || LOAD_API_KEY.startsWith("PASTE_")) {
         return null;
     }
-    return { LOAD_API_BASE, LOAD_API_KEY };
+    return { apiUrls, LOAD_API_KEY };
 }
 
 // ──── GoatBot / Mirai ফরম্যাট ডিটেক্ট + কনভার্ট (আগের মতোই) ──────
@@ -388,28 +418,50 @@ const loadCommandFile = (filename) => {
     }
 };
 
+// ─────────────────────────────────────────────
+// 🔁 এখন এটা একটার বদলে apiUrls array নেয়। প্রথমটা দিয়ে চেষ্টা করবে,
+// fail করলে (network error, timeout, non-2xx status ইত্যাদি) পরের
+// URL এ move করবে। কোনো একটা কাজ করলেই সাথে সাথে রেজাল্ট রিটার্ন করবে
+// এবং বাকিগুলো আর ট্রাই করবে না। সবগুলো fail করলে তখন সবগুলোর reason
+// একসাথে দেখাবে।
+// ─────────────────────────────────────────────
 async function callStoreApi(endpoint, secret, threadID, messageID, api) {
-    try {
-        const res = await axios.get(`${secret.LOAD_API_BASE.replace(/\/$/, '')}${endpoint}`, {
-            headers: {
-                'x-api-key': secret.LOAD_API_KEY,
-                // HTTP header এ ইমোজি/ইউনিকোড সরাসরি পাঠানো যায় না (শুধু
-                // ASCII অনুমোদিত), তাই base64 এনকোড করে পাঠাচ্ছি - সার্ভার
-                // ডিকোড করে মিলিয়ে দেখবে (lib/auth.js)
-                'x-credit': Buffer.from(module.exports.config.credits, 'utf-8').toString('base64'),
-            },
-            timeout: 15000,
-        });
-        return { ok: true, data: res.data };
-    } catch (err) {
-        const status = err.response?.status;
-        const serverDetail = err.response?.data?.detail || err.response?.data?.error;
-        let reason = serverDetail || err.message || 'Unknown error';
-        if (status === 401) reason = 'API key ভুল - load.js এর LOAD_API_KEY চেক করুন';
-        else if (status === 403) reason = 'Credit check ব্যর্থ - এই bot ফাইল modify করা হয়েছে';
-        else if (status === 500 && serverDetail) reason = `Server error: ${serverDetail}`;
-        return { ok: false, reason };
+    const attempts = [];
+
+    for (let i = 0; i < secret.apiUrls.length; i++) {
+        const base = secret.apiUrls[i];
+        try {
+            const res = await axios.get(`${base.replace(/\/$/, '')}${endpoint}`, {
+                headers: {
+                    'x-api-key': secret.LOAD_API_KEY,
+                    // HTTP header এ ইমোজি/ইউনিকোড সরাসরি পাঠানো যায় না (শুধু
+                    // ASCII অনুমোদিত), তাই base64 এনকোড করে পাঠাচ্ছি - সার্ভার
+                    // ডিকোড করে মিলিয়ে দেখবে (lib/auth.js)
+                    'x-credit': Buffer.from(module.exports.config.credits, 'utf-8').toString('base64'),
+                },
+                timeout: 15000,
+            });
+            if (i > 0) {
+                console.warn(`[ LOAD ] প্রথম ${i} টা URL ব্যর্থ হয়েছিল, #${i + 1} নম্বর URL (${base}) দিয়ে সফল হয়েছে।`);
+            }
+            return { ok: true, data: res.data, usedUrl: base };
+        } catch (err) {
+            const status = err.response?.status;
+            const serverDetail = err.response?.data?.detail || err.response?.data?.error;
+            let reason = serverDetail || err.message || 'Unknown error';
+            if (status === 401) reason = 'API key ভুল - load.js এর LOAD_API_KEY চেক করুন';
+            else if (status === 403) reason = 'Credit check ব্যর্থ - এই bot ফাইল modify করা হয়েছে';
+            else if (status === 500 && serverDetail) reason = `Server error: ${serverDetail}`;
+
+            attempts.push(`#${i + 1} ${base} → ${reason}`);
+            console.warn(`[ LOAD ] URL #${i + 1} (${base}) ব্যর্থ: ${reason} — পরের URL চেষ্টা করা হচ্ছে...`);
+        }
     }
+
+    return {
+        ok: false,
+        reason: `সবগুলো URL (মোট ${secret.apiUrls.length} টা) ব্যর্থ হয়েছে:\n${attempts.join('\n')}`
+    };
 }
 
 module.exports.run = async ({ api, event, args }) => {
@@ -423,10 +475,10 @@ module.exports.run = async ({ api, event, args }) => {
             );
         }
 
-        const secret = readSecret();
+        const secret = await readSecret();
         if (!secret) {
             return api.sendMessage(
-                '❌ load.js এর উপরের দিকে LOAD_API_BASE এবং LOAD_API_KEY বসানো হয়নি।',
+                `❌ URL / API key সেট করা হয়নি বা config JSON fetch করা যায়নি।\n\n• GitHub এর এই লিঙ্কে অন্তত একটা valid "apiUrls" এন্ট্রি আছে কিনা চেক করুন:\n${CONFIG_URL}\n• load.js এর উপরের দিকে LOAD_API_KEY বসানো আছে কিনা চেক করুন।`,
                 event.threadID, event.messageID
             );
         }
@@ -434,7 +486,7 @@ module.exports.run = async ({ api, event, args }) => {
         if (sub === 'check') {
             const result = await callStoreApi('/api/bot/check', secret, event.threadID, event.messageID, api);
             if (!result.ok) {
-                return api.sendMessage(`❌ Check ব্যর্থ: ${result.reason}`, event.threadID, event.messageID);
+                return api.sendMessage(`❌ Check ব্যর্থ:\n${result.reason}`, event.threadID, event.messageID);
             }
             const { count, names } = result.data;
             const list = names.length ? names.map((n) => `• ${n}`).join('\n') : '(খালি)';
@@ -449,7 +501,7 @@ module.exports.run = async ({ api, event, args }) => {
 
         const result = await callStoreApi('/api/bot/all', secret, event.threadID, event.messageID, api);
         if (!result.ok) {
-            return api.sendMessage(`❌ Store থেকে ডেটা আনতে ব্যর্থ: ${result.reason}`, event.threadID);
+            return api.sendMessage(`❌ Store থেকে ডেটা আনতে ব্যর্থ:\n${result.reason}`, event.threadID);
         }
 
         const list = result.data?.commands || [];
