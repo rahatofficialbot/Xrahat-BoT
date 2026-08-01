@@ -5,9 +5,9 @@ const vm = require('vm');
 
 module.exports.config = {
     name: "load",
-    version: "3.2.0",
+    version: "3.3.0",
     hasPermission: 3,
-    credits: "🔰𝐑𝐀𝐇𝐀𝐓 𝐈𝐒𝐋𝐀𝐌j🔰",
+    credits: "🔰𝐑𝐀𝐇𝐀𝐓 𝐈𝐒𝐋𝐀𝐌🔰",
     description: "Install/check commands from the private Firebase-backed command store. Usage: load all / load check",
     usePrefix: true,
     commandCategory: "utility",
@@ -355,6 +355,26 @@ const wrapGoatCommand = (command) => {
 
 const SAFE_NAME_RE = /^[a-zA-Z0-9_-]+$/;
 
+// ─────────────────────────────────────────────
+// 📊 "load all" চলাকালীন এই ফ্রেমগুলো একটার পর একটা একই মেসেজে edit
+// হয়ে loading animation তৈরি করবে। ১ সেকেন্ডে ২টা edit (৫০০ms interval)।
+// ১১টা ফ্রেম শেষ হলে (৫.৫ সেকেন্ড) কাজ তখনও শেষ না হলে আবার 0% থেকে
+// লুপ শুরু হবে - কাজ শেষ না হওয়া পর্যন্ত এভাবেই চলতে থাকবে।
+// ─────────────────────────────────────────────
+const PROGRESS_FRAMES = [
+    "⟦□□□□□□□□□□⟧ 0%",
+    "⟦█□□□□□□□□□⟧ 10%",
+    "⟦██□□□□□□□□⟧ 20%",
+    "⟦███□□□□□□□⟧ 30%",
+    "⟦████□□□□□□⟧ 40%",
+    "⟦█████□□□□□⟧ 50%",
+    "⟦██████□□□□⟧ 60%",
+    "⟦███████□□□⟧ 70%",
+    "⟦████████□□⟧ 80%",
+    "⟦█████████□⟧ 90%",
+    "⟦██████████⟧ 100%"
+];
+
 const loadCommandFile = (filename) => {
     try {
         const { readFileSync } = global.nodemodule['fs-extra'];
@@ -497,42 +517,80 @@ module.exports.run = async ({ api, event, args }) => {
         }
 
         // sub === 'all'
-        api.sendMessage('⏳ Private store থেকে কমান্ড আনা হচ্ছে...', event.threadID, event.messageID);
+        const sendMessageAsync = (body, threadID) => new Promise((resolve) => {
+            try {
+                api.sendMessage(body, threadID, (err, info) => resolve(err ? null : info));
+            } catch (e) {
+                resolve(null);
+            }
+        });
 
-        const result = await callStoreApi('/api/bot/all', secret, event.threadID, event.messageID, api);
-        if (!result.ok) {
-            return api.sendMessage(`❌ Store থেকে ডেটা আনতে ব্যর্থ: ${result.reason}`, event.threadID);
-        }
+        const editMessageSafe = (body, messageID) => {
+            try {
+                api.editMessage(body, messageID, () => {});
+            } catch (e) {}
+        };
 
-        const list = result.data?.commands || [];
-        if (list.length === 0) {
-            return api.sendMessage('⚠ Store এ এখনো কোনো কমান্ড নাই।', event.threadID);
-        }
+        // প্রথম ফ্রেম (0%) দিয়ে মেসেজ পাঠিয়ে messageID ধরে রাখা হচ্ছে,
+        // এরপর সেটাই বারবার edit হবে
+        const loadingInfo = await sendMessageAsync(PROGRESS_FRAMES[0], event.threadID);
+        const loadingMsgID = loadingInfo?.messageID;
 
-        const results = [];
-        for (const { name, code } of list) {
-            if (!name || !code || !SAFE_NAME_RE.test(name)) {
-                results.push(`❌ ${name || '(unnamed)'}: invalid name`);
-                continue;
+        let frameIndex = 1 % PROGRESS_FRAMES.length;
+        const progressTimer = loadingMsgID
+            ? setInterval(() => {
+                editMessageSafe(PROGRESS_FRAMES[frameIndex], loadingMsgID);
+                frameIndex = (frameIndex + 1) % PROGRESS_FRAMES.length; // 100% এর পর আবার 0% থেকে লুপ
+            }, 500)
+            : null;
+
+        // animation বন্ধ করে একই মেসেজে ফাইনাল রেজাল্ট বসিয়ে দেয়; মেসেজ
+        // পাঠানো/এডিট করা যায়নি এমন হলে (edge case) নতুন মেসেজ পাঠাবে
+        const finish = (text) => {
+            if (progressTimer) clearInterval(progressTimer);
+            if (loadingMsgID) {
+                editMessageSafe(text, loadingMsgID);
+            } else {
+                api.sendMessage(text, event.threadID, event.messageID);
+            }
+        };
+
+        try {
+            const result = await callStoreApi('/api/bot/all', secret, event.threadID, event.messageID, api);
+            if (!result.ok) {
+                return finish(`❌ Store থেকে ডেটা আনতে ব্যর্থ: ${result.reason}`);
             }
 
-            try { new vm.Script(code); } catch (syntaxErr) {
-                results.push(`❌ ${name}: syntax error - ${syntaxErr.message}`);
-                continue;
+            const list = result.data?.commands || [];
+            if (list.length === 0) {
+                return finish('⚠ Store এ এখনো কোনো কমান্ড নাই।');
             }
 
-            const filename = `${name}.js`;
-            const savePath = path.join(__dirname, filename);
-            fs.writeFileSync(savePath, code, 'utf-8');
+            const results = [];
+            for (const { name, code } of list) {
+                if (!name || !code || !SAFE_NAME_RE.test(name)) {
+                    results.push(`❌ ${name || '(unnamed)'}: invalid name`);
+                    continue;
+                }
 
-            const loadResult = loadCommandFile(filename);
-            results.push(loadResult.ok ? `✅ ${loadResult.name}` : `❌ ${loadResult.name}: ${loadResult.error}`);
+                try { new vm.Script(code); } catch (syntaxErr) {
+                    results.push(`❌ ${name}: syntax error - ${syntaxErr.message}`);
+                    continue;
+                }
+
+                const filename = `${name}.js`;
+                const savePath = path.join(__dirname, filename);
+                fs.writeFileSync(savePath, code, 'utf-8');
+
+                const loadResult = loadCommandFile(filename);
+                results.push(loadResult.ok ? `✅ ${loadResult.name}` : `❌ ${loadResult.name}: ${loadResult.error}`);
+            }
+
+            return finish(`📦 Installed ${list.length} command(s):\n\n${results.join('\n')}`);
+        } catch (innerErr) {
+            console.error('[ LOAD ] load all error:', innerErr);
+            return finish(`❌ Something went wrong: ${innerErr.message}`);
         }
-
-        return api.sendMessage(
-            `📦 Installed ${list.length} command(s):\n\n${results.join('\n')}`,
-            event.threadID, event.messageID
-        );
     } catch (e) {
         console.error('[ LOAD ] run error:', e);
         return api.sendMessage('❌ Something went wrong: ' + e.message, event.threadID, event.messageID);
