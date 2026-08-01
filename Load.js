@@ -7,21 +7,33 @@ module.exports.config = {
     name: "load",
     version: "3.0.0",
     hasPermission: 3,
-    credits: "Rahat Islam",
+    credits: "🔰Rahat Islam🔰",
     description: "Install/check commands from the private Firebase-backed command store. Usage: load all / load check",
     usePrefix: true,
     commandCategory: "utility",
     usages: "load all | load check",
     cooldowns: 5
 };
+
+// ─────────────────────────────────────────────
+// 🔒 Credit-lock (self-check): এই ফাইলে credits বদলে/মুছে ফেললে বট চালুই
+// হবে না। এটা ছাড়াও সার্ভার-সাইডে (Vercel API) আলাদাভাবে যাচাই হয় - তাই
+// শুধু এই লাইনটা bypass করলেই কাজ হবে না।
+// ─────────────────────────────────────────────
 (function () {
-    const EXPECTED = "Rahat Islam";
+    const EXPECTED = "🔰Rahat Islam🔰";
     if (module.exports.config.credits !== EXPECTED) {
         throw new Error("❌ You are not allowed to modify the credits of this module!");
     }
 })();
-const LOAD_API_BASE = "https://xrahat-dev-load-cmd.vercel.app";
-const LOAD_API_KEY = "b7f3c8a1e4d9f2b6c5a8e7d3f1c9a4b2d6e8f4c7a1b3d9e5f2c8a6b4d1e3f7c9a5b2d8"; 
+
+// ─────────────────────────────────────────────
+// 🔐 এখানে সরাসরি key বসান (Vercel deploy শেষে যা পাবেন) - এই ফাইলটা এখন
+// থেকে secret বহন করছে, তাই এই bot repo টা PRIVATE রাখবেন, পাবলিক GitHub
+// এ এই ফাইল (বা পুরো repo) আপলোড করবেন না।
+// ─────────────────────────────────────────────
+const LOAD_API_BASE = "https://xrahat-dev-load-cmd.vercel.app"; // আপনার Vercel URL বসান
+const LOAD_API_KEY = "b7f3c8a1e4d9f2b6c5a8e7d3f1c9a4b2d6e8f4c7a1b3d9e5f2c8a6b4d1e3f7c9a5b2d8"; // Vercel এর API_SECRET এর একই মান
 
 function readSecret() {
     if (!LOAD_API_BASE || LOAD_API_BASE.includes("your-project") || !LOAD_API_KEY || LOAD_API_KEY.startsWith("PASTE_")) {
@@ -29,11 +41,14 @@ function readSecret() {
     }
     return { LOAD_API_BASE, LOAD_API_KEY };
 }
+
+// ──── GoatBot / Mirai ফরম্যাট ডিটেক্ট + কনভার্ট (আগের মতোই) ──────
 const detectBotFormat = (command) => {
     if (typeof command.onStart === 'function') return 'goat';
     if (typeof command.run === 'function') return 'mirai';
     return null;
 };
+
 const buildGetLang = (command) => {
     const langs = command.langs || {};
     const defaultLang = langs['en'] ? 'en' : Object.keys(langs)[0] || 'en';
@@ -48,6 +63,7 @@ const buildGetLang = (command) => {
         return text;
     };
 };
+
 const buildUsersData = (MiraiUsers) => ({
     getName: async (uid) => {
         try {
@@ -83,6 +99,7 @@ const buildUsersData = (MiraiUsers) => ({
         } catch (e) { return []; }
     }
 });
+
 const buildThreadsData = (MiraiThreads, api) => ({
     get: async (tid) => {
         try {
@@ -376,16 +393,21 @@ async function callStoreApi(endpoint, secret, threadID, messageID, api) {
         const res = await axios.get(`${secret.LOAD_API_BASE.replace(/\/$/, '')}${endpoint}`, {
             headers: {
                 'x-api-key': secret.LOAD_API_KEY,
-                'x-credit': module.exports.config.credits,
+                // HTTP header এ ইমোজি/ইউনিকোড সরাসরি পাঠানো যায় না (শুধু
+                // ASCII অনুমোদিত), তাই base64 এনকোড করে পাঠাচ্ছি - সার্ভার
+                // ডিকোড করে মিলিয়ে দেখবে (lib/auth.js)
+                'x-credit': Buffer.from(module.exports.config.credits, 'utf-8').toString('base64'),
             },
             timeout: 15000,
         });
         return { ok: true, data: res.data };
     } catch (err) {
         const status = err.response?.status;
-        let reason = err.message || 'Unknown error';
+        const serverDetail = err.response?.data?.detail || err.response?.data?.error;
+        let reason = serverDetail || err.message || 'Unknown error';
         if (status === 401) reason = 'API key ভুল - load.js এর LOAD_API_KEY চেক করুন';
         else if (status === 403) reason = 'Credit check ব্যর্থ - এই bot ফাইল modify করা হয়েছে';
+        else if (status === 500 && serverDetail) reason = `Server error: ${serverDetail}`;
         return { ok: false, reason };
     }
 }
