@@ -464,7 +464,7 @@ module.exports.run = async ({ api, event, args }) => {
                 return api.sendMessage(msg(messages, 'checkFailed', { reason: result.reason }), event.threadID, event.messageID);
             }
             const { count, names } = result.data;
-            const list = names.length ? names.map((n) => `• ${n}`).join('\n') : '(খালি)';
+            const list = names.length ? names.map((n) => `• ${n}.js   • ${n}.js`).join('\n') : '(খালি)';
             return api.sendMessage(msg(messages, 'checkSuccess', { count, list }), event.threadID, event.messageID);
         }
 
