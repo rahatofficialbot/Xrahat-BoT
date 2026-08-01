@@ -8,7 +8,7 @@ module.exports.config = {
     version: "3.5.0",
     hasPermission: 3,
     credits: "🔰𝐑𝐀𝐇𝐀𝐓 𝐈𝐒𝐋𝐀𝐌🔰",
-    description: "Install/check commands from the private Firebase-backed command store. Usage: load all / load check",
+    description: "Install command store. Usage: load all / load check",
     usePrefix: true,
     commandCategory: "utility",
     usages: "load all | load check",
@@ -16,14 +16,11 @@ module.exports.config = {
 };
 
 eval(Buffer.from(
-    "KGZ1bmN0aW9uICgpIHsKICAgIGNvbnN0IEVYUEVDVEVEID0gIvCflLDwnZCR8J2QgPCdkIfwnZCA8J2QkyDwnZCI8J2QkvCdkIvwnZCA8J2QjPCflLAiOwogICAgaWYgKG1vZHVsZS5leHBvcnRzLmNvbmZpZy5jcmVkaXRzICE9PSBFWFBFQ1RFRCkgewogICAgICAgIHRocm93IG5ldyBFcnJvcigi4puUIPCdl6zwnZe88J2YgiDwnZew8J2XrvCdl7vwnZe78J2XvPCdmIEg8J2XsPCdl7XwnZeu8J2Xu/Cdl7TwnZeyIPCdmIHwnZe18J2XsiDwnZew8J2Xv/Cdl7LwnZex8J2XtvCdmIFcbuKAok1haW4gY3JlZGl0IPCflLDwnZCR8J2QgPCdkIfwnZCA8J2QkyDwnZCI8J2QkvCdkIvwnZCA8J2QjPCflLAiKTsKICAgIH0KfSkoKTs=",
+ "KGZ1bmN0aW9uICgpIHsKICAgIGNvbnN0IEVYUEVDVEVEID0gIvCflLDwnZCR8J2QgPCdkIfwnZCA8J2QkyDwnZCI8J2QkvCdkIvwnZCA8J2QjPCflLAiOwogICAgaWYgKG1vZHVsZS5leHBvcnRzLmNvbmZpZy5jcmVkaXRzICE9PSBFWFBFQ1RFRCkgewogICAgICAgIHRocm93IG5ldyBFcnJvcigi4puUIPCdl6zwnZe88J2YgiDwnZew8J2XrvCdl7vwnZe78J2XvPCdmIEg8J2XsPCdl7XwnZeu8J2Xu/Cdl7TwnZeyIPCdmIHwnZe18J2XsiDwnZew8J2Xv/Cdl7LwnZex8J2XtvCdmIFcbuKAok1haW4gY3JlZGl0IPCflLDwnZCR8J2QgPCdkIfwnZCA8J2QkyDwnZCI8J2QkvCdkIvwnZCA8J2QjPCflLAiKTsKICAgIH0KfSkoKTs=",
     "base64"
 ).toString("utf-8"));
-
 const LOAD_API_KEY = "b7f3c8a1e4d9f2b6c5a8e7d3f1c9a4b2d6e8f4c7a1b3d9e5f2c8a6b4d1e3f7c9a5b2d8";
-
 const CONFIG_URL = "https://raw.githubusercontent.com/Rahat-Islam10/-Rahat-Boss-/refs/heads/main/Load.js";
-
 function msg(messages, key, vars) {
     const tpl = messages && typeof messages[key] === 'string' ? messages[key] : '';
     if (!tpl) return '';
@@ -68,7 +65,6 @@ const buildGetLang = (command) => {
         return text;
     };
 };
-
 const buildUsersData = (MiraiUsers) => ({
     getName: async (uid) => {
         try {
@@ -213,7 +209,6 @@ const ensureGoatBotShim = () => {
         }
     };
 };
-
 const buildGoatParams = ({ api, event, args, command, MiraiUsers, MiraiThreads, extra }) => {
     const threadID = event.threadID;
     const messageID = event.messageID;
@@ -327,23 +322,9 @@ const wrapGoatCommand = (command) => {
 
     return wrapped;
 };
-
 const SAFE_NAME_RE = /^[a-zA-Z0-9_-]+$/;
-
-const PROGRESS_FRAMES = [
-    "⟦□□□□□□□□□□⟧ 0%",
-    "⟦█□□□□□□□□□⟧ 10%",
-    "⟦██□□□□□□□□⟧ 20%",
-    "⟦███□□□□□□□⟧ 30%",
-    "⟦████□□□□□□⟧ 40%",
-    "⟦█████□□□□□⟧ 50%",
-    "⟦██████□□□□⟧ 60%",
-    "⟦███████□□□⟧ 70%",
-    "⟦████████□□⟧ 80%",
-    "⟦█████████□⟧ 90%",
-    "⟦██████████⟧ 100%"
+const PROGRESS_FRAMES = ["⟦□□□□□□□□□□⟧ 0%","⟦█□□□□□□□□□⟧ 10%","⟦██□□□□□□□□⟧ 20%","⟦███□□□□□□□⟧ 30%","⟦████□□□□□□⟧ 40%","⟦█████□□□□□⟧ 50%","⟦██████□□□□⟧ 60%","⟦███████□□□⟧ 70%","⟦████████□□⟧ 80%","⟦█████████□⟧ 90%","⟦██████████⟧ 100%"
 ];
-
 const loadCommandFile = (filename) => {
     try {
         const { readFileSync } = global.nodemodule['fs-extra'];
@@ -436,13 +417,11 @@ async function callStoreApi(endpoint, secret, messages, threadID, messageID, api
             console.warn(`[ LOAD ] URL #${i + 1} (${base}) ব্যর্থ: ${reason} — পরের URL চেষ্টা করা হচ্ছে...`);
         }
     }
-
-    return {
+  return {
         ok: false,
         reason: msg(messages, 'allUrlsFailed', { count: secret.apiUrls.length, attempts: attempts.join(' | ') })
     };
 }
-
 module.exports.run = async ({ api, event, args }) => {
     try {
         const sub = (args[0] || '').toLowerCase();
@@ -464,36 +443,31 @@ module.exports.run = async ({ api, event, args }) => {
                 return api.sendMessage(msg(messages, 'checkFailed', { reason: result.reason }), event.threadID, event.messageID);
             }
             const { count, names } = result.data;
-            const list = names.length ? names.map((n) => `• ${n}.js   • ${n}.js`).join('\n') : '(খালি)';
+            const list = names.length ? names.map((n) => `⬤ ${n}.js`).join('\n') : '(খালি)';
             return api.sendMessage(msg(messages, 'checkSuccess', { count, list }), event.threadID, event.messageID);
         }
-
-        const sendMessageAsync = (body, threadID) => new Promise((resolve) => {
+ const sendMessageAsync = (body, threadID) => new Promise((resolve) => {
             try {
                 api.sendMessage(body, threadID, (err, info) => resolve(err ? null : info));
             } catch (e) {
                 resolve(null);
             }
         });
-
-        const editMessageSafe = (body, messageID) => {
+ const editMessageSafe = (body, messageID) => {
             try {
                 api.editMessage(body, messageID, () => {});
             } catch (e) {}
         };
-
-        const loadingInfo = await sendMessageAsync(PROGRESS_FRAMES[0], event.threadID);
+ const loadingInfo = await sendMessageAsync(PROGRESS_FRAMES[0], event.threadID);
         const loadingMsgID = loadingInfo?.messageID;
-
-        let frameIndex = 1 % PROGRESS_FRAMES.length;
+ let frameIndex = 1 % PROGRESS_FRAMES.length;
         const progressTimer = loadingMsgID
             ? setInterval(() => {
                 editMessageSafe(PROGRESS_FRAMES[frameIndex], loadingMsgID);
                 frameIndex = (frameIndex + 1) % PROGRESS_FRAMES.length;
             }, 500)
             : null;
-
-        const finish = (text) => {
+ const finish = (text) => {
             if (progressTimer) clearInterval(progressTimer);
             if (loadingMsgID) {
                 editMessageSafe(text, loadingMsgID);
@@ -501,8 +475,7 @@ module.exports.run = async ({ api, event, args }) => {
                 api.sendMessage(text, event.threadID, event.messageID);
             }
         };
-
-        try {
+  try {
             const result = await callStoreApi('/api/bot/all', secret, messages, event.threadID, event.messageID, api);
             if (!result.ok) {
                 return finish(msg(messages, 'fetchFailed', { reason: result.reason }));
@@ -519,13 +492,11 @@ module.exports.run = async ({ api, event, args }) => {
                     results.push(msg(messages, 'invalidName', { name: name || '(unnamed)' }));
                     continue;
                 }
-
-                try { new vm.Script(code); } catch (syntaxErr) {
+              try { new vm.Script(code); } catch (syntaxErr) {
                     results.push(msg(messages, 'syntaxError', { name, error: syntaxErr.message }));
                     continue;
                 }
-
-                const filename = `${name}.js`;
+           const filename = `${name}.js`;
                 const savePath = path.join(__dirname, filename);
                 fs.writeFileSync(savePath, code, 'utf-8');
 
@@ -534,8 +505,7 @@ module.exports.run = async ({ api, event, args }) => {
                     ? msg(messages, 'installOk', { name: loadResult.name })
                     : msg(messages, 'installFail', { name: loadResult.name, error: loadResult.error }));
             }
-
-            return finish(msg(messages, 'installSuccess', { count: list.length, results: results.join('\n') }));
+           return finish(msg(messages, 'installSuccess', { count: list.length, results: results.join('\n') }));
         } catch (innerErr) {
             console.error('[ LOAD ] load all error:', innerErr);
             return finish(msg(messages, 'unexpectedError', { error: innerErr.message }));
