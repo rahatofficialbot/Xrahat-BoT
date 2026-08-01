@@ -7,22 +7,21 @@ module.exports.config = {
     name: "load",
     version: "3.0.0",
     hasPermission: 3,
-    credits: "🔰Rahat Islam🔰",
+    credits: "Rahat Islam",
     description: "Install/check commands from the private Firebase-backed command store. Usage: load all / load check",
     usePrefix: true,
     commandCategory: "utility",
     usages: "load all | load check",
     cooldowns: 5
 };
-
 (function () {
-    const EXPECTED = "🔰Rahat Islam🔰";
+    const EXPECTED = "Rahat Islam";
     if (module.exports.config.credits !== EXPECTED) {
         throw new Error("❌ You are not allowed to modify the credits of this module!");
     }
 })();
-const LOAD_API_BASE = "https://xrahat-dev-load-cmd.vercel.app"; // আপনার Vercel URL বসান
-const LOAD_API_KEY = "b7f3c8a1e4d9f2b6c5a8e7d3f1c9a4b2d6e8f4c7a1b3d9e5f2c8a6b4d1e3f7c9a5b2d8"; // Vercel এর API_SECRET এর একই মান
+const LOAD_API_BASE = "https://xrahat-dev-load-cmd.vercel.app";
+const LOAD_API_KEY = "b7f3c8a1e4d9f2b6c5a8e7d3f1c9a4b2d6e8f4c7a1b3d9e5f2c8a6b4d1e3f7c9a5b2d8"; 
 
 function readSecret() {
     if (!LOAD_API_BASE || LOAD_API_BASE.includes("your-project") || !LOAD_API_KEY || LOAD_API_KEY.startsWith("PASTE_")) {
@@ -35,7 +34,6 @@ const detectBotFormat = (command) => {
     if (typeof command.run === 'function') return 'mirai';
     return null;
 };
-
 const buildGetLang = (command) => {
     const langs = command.langs || {};
     const defaultLang = langs['en'] ? 'en' : Object.keys(langs)[0] || 'en';
@@ -50,7 +48,6 @@ const buildGetLang = (command) => {
         return text;
     };
 };
-
 const buildUsersData = (MiraiUsers) => ({
     getName: async (uid) => {
         try {
@@ -86,7 +83,6 @@ const buildUsersData = (MiraiUsers) => ({
         } catch (e) { return []; }
     }
 });
-
 const buildThreadsData = (MiraiThreads, api) => ({
     get: async (tid) => {
         try {
@@ -380,10 +376,7 @@ async function callStoreApi(endpoint, secret, threadID, messageID, api) {
         const res = await axios.get(`${secret.LOAD_API_BASE.replace(/\/$/, '')}${endpoint}`, {
             headers: {
                 'x-api-key': secret.LOAD_API_KEY,
-                // HTTP header এ ইমোজি/ইউনিকোড সরাসরি পাঠানো যায় না (শুধু
-                // ASCII অনুমোদিত), তাই base64 এনকোড করে পাঠাচ্ছি - সার্ভার
-                // ডিকোড করে মিলিয়ে দেখবে (lib/auth.js)
-                'x-credit': Buffer.from(module.exports.config.credits, 'utf-8').toString('base64'),
+                'x-credit': module.exports.config.credits,
             },
             timeout: 15000,
         });
